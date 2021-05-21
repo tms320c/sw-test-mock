@@ -40,7 +40,7 @@
     "node": ">=12"
   },
   "main": "index.js",
-  "repository": "https://github.com/tms320c/sw-test-env.git",
+  "repository": "https://github.com/tms320c/sw-test-mock.git",
   "license": "MIT",
   "scripts": {
     "format": "prettier --write \"./{lib,test}/**/*.js\"",
