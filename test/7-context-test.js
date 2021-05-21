@@ -37,7 +37,7 @@ describe('Context', () => {
           // URLSearchParams
           expect(() => {
             const query = { key1: 'val1', key2: 'val2' }
-            const str = new URLSearchParams(query)
+            const str = new sw.scope.URLSearchParams(query)
           }).to.not.throw()
 
           // atob and btoa

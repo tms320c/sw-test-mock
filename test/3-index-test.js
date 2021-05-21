@@ -6,7 +6,7 @@ const nock = require('nock')
 
 let fake, sw
 
-describe('sw-test-env', () => {
+describe('sw-test-mock', () => {
   before(() => {
     nock.disableNetConnect()
     nock.enableNetConnect('localhost')
