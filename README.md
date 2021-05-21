@@ -134,4 +134,4 @@ sw.register('sw-utils.js')
 
 ## Inspiration & Thanks
 
-Special thanks goes to Pinterest ([service-worker-mock](https://github.com/pinterest/service-workers/tree/master/packages/service-worker-mock)) and Nolan Lawson ([pseudo-worker](https://github.com/nolanlawson/pseudo-worker)) for their ideas (some of which were borrowed here) and inspiring work.
+Special thanks goes to Pope Industries ([sw-test-env](https://github.com/popeindustries/sw-test-env)) as to the author of the original work.

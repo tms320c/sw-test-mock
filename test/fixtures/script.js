@@ -1,1 +1,1 @@
-self.foo = 'foo';
+self.foo = 'foo'

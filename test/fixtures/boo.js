@@ -1,4 +1,4 @@
-var bat = 'bat';
+var bat = 'bat'
 
-self.boo = 'boo';
-caches.open('boo');
+self.boo = 'boo'
+caches.open('boo')

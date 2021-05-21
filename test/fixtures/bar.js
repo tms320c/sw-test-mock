@@ -1,4 +1,4 @@
-var foo = 'foo';
+var foo = 'foo'
 
-self.bar = 'bar';
-caches.open('bar');
+self.bar = 'bar'
+caches.open('bar')

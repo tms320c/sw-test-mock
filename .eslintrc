@@ -5,7 +5,10 @@
     "mocha": true,
     "node": true
   },
-  "extends": ["eslint:recommended", "prettier"],
+  "extends": [
+    "eslint:recommended",
+    "prettier"
+  ],
   "parser": "babel-eslint",
   "parserOptions": {
     "ecmaVersion": 2017,
@@ -14,9 +17,25 @@
       "experimentalObjectRestSpread": true
     }
   },
-  "plugins": ["prettier"],
+  "globals": {
+    "fetch": false,
+    "self": false
+  },
+  "plugins": [
+    "prettier"
+  ],
   "rules": {
+    "comma-dangle": [
+      "error",
+      "only-multiline"
+    ],
+    "no-alert": "error",
     "no-console": 0,
-    "no-unused-vars": [0, { "ignoreRestSiblings": true }]
+    "no-unused-vars": [
+      0,
+      {
+        "ignoreRestSiblings": true
+      }
+    ]
   }
 }

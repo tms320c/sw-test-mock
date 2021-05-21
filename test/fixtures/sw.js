@@ -1,14 +1,14 @@
-'use strict';
+'use strict'
 
 self.addEventListener('install', (evt) => {
-  self.foo = 'foo';
-});
+  self.foo = 'foo'
+})
 
 self.addEventListener('activate', (evt) => {
   evt.waitUntil(
     new Promise((resolve) => {
-      self.bar = 'bar';
-      setTimeout(resolve, 100);
+      self.bar = 'bar'
+      setTimeout(resolve, 100)
     })
-  );
-});
+  )
+})
