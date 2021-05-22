@@ -1,5 +1,4 @@
 'use strict'
-
 const { handle } = require('./lib/events')
 const createContext = require('./lib/createContext')
 const fetchFactory = require('./lib/fetchFactory')
@@ -119,7 +118,7 @@ function register(
     script = importScripts(script, container._webroot)
     // contextLocation.origin = origin;
     contextLocation._webroot = container._webroot
-    context = createContext(
+    const ctx = createContext(
       globalScope,
       contextLocation,
       contextPath,
@@ -128,16 +127,17 @@ function register(
       permissionQuery
     )
 
-    const sandbox = vm.createContext(context)
+    const sandbox = vm.createContext(ctx)
 
     vm.runInContext(script, sandbox)
 
     context = {
-      api: context.module.exports,
+      api: ctx.module.exports,
       registration,
       scope: sandbox,
       sw,
     }
+
     contexts.set(urlScope, context)
   }
 

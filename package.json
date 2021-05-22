@@ -15,6 +15,7 @@
   "dependencies": {
     "atob": "^2.1.2",
     "btoa": "^1.2.1",
+    "cross-blob": "^2.0.0",
     "fake-indexeddb": "^3.1.2",
     "form-data": "^4.0.0",
     "mime-types": "^2.1.30",
@@ -37,7 +38,7 @@
     "prettier": "^2.3.0"
   },
   "engines": {
-    "node": ">=12"
+    "node": ">=15"
   },
   "main": "index.js",
   "repository": "https://github.com/tms320c/sw-test-mock.git",

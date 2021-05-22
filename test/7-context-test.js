@@ -40,58 +40,26 @@ describe('Context', () => {
             const str = new sw.scope.URLSearchParams(query)
           }).to.not.throw()
 
-          // atob and btoa
-          expect(sw.scope.atob).to.be.a('function')
-          expect(sw.scope.btoa).to.be.a('function')
-
           // TextEncoder and TextDecoder
           expect(() => {
             const encoder = new sw.scope.TextEncoder()
             const decoder = new sw.scope.TextDecoder()
           }).to.not.throw()
-        })
-    })
-    it('implements navigator.permissions with default query function', () => {
-      return sw
-        .register('test/fixtures/sw.js')
-        .then((registration) => sw.ready)
-        .then((registration) => {
-          expect(sw._sw.state).to.equal('activated')
-          expect(sw.scope.navigator.permissions)
-            .to.be.an('object')
-            .that.has.property('query')
-            .that.is.a('function')
-          expect(sw.scope.navigator.permissions.query.constructor.name).to.equal('AsyncFunction')
 
-          sw.scope.navigator.permissions
-            .query({
-              name: 'notifications',
-            })
-            .then((status) => {
-              expect(status).to.be.an('object').that.has.property('onchange').that.is.a('function')
-              expect(status).to.be.an('object').that.has.property('state')
-              expect(status.state).to.equal('granted')
-            })
+          // Blob
+          expect(() => {
+            const bbb = new sw.scope.Blob([])
+          }).to.not.throw()
 
-          sw.scope.navigator.permissions
-            .query({
-              name: 'something',
-            })
-            .then((status) => {
-              expect(status).to.be.an('object').that.has.property('onchange').that.is.a('function')
-              expect(status).to.be.an('object').that.has.property('state')
-              expect(status.state).to.equal('denied')
-            })
+          // EventTarget
+          expect(() => {
+            const target = new EventTarget()
+          }).to.not.throw()
 
-          sw.scope.navigator.permissions
-            .query({
-              name: 'notifications',
-            })
-            .then((status) => {
-              expect(() => {
-                status.state = 'it should be readonly'
-              }).to.throw()
-            })
+          // Event
+          expect(() => {
+            const target = new Event('test')
+          }).to.not.throw()
         })
     })
   })
