@@ -43,7 +43,7 @@ describe('WorkerGlobalScope', () => {
           expect(sw.scope.self).to.is.an('object')
 
           // performance
-          expect(typeof sw.scope.performance).to.equal('object') //.and.equal('not implemented')
+          expect(sw.scope.performance).to.is.a('string').and.equal('not implemented')
 
           // navigator
           expect(() => {
