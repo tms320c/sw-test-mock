@@ -2,6 +2,7 @@
 
 const { expect } = require('chai')
 const Client = require('../lib/Client')
+const WindowClient = require('../lib/WindowClient')
 const Clients = require('../lib/Clients')
 
 describe('clients', () => {
@@ -34,7 +35,7 @@ describe('clients', () => {
 
         expect(actual).to.be.a('promise')
         return actual.then((client) => {
-          expect(client).to.be.an.instanceof(Client)
+          expect(client).to.be.an.instanceof(WindowClient)
         })
       })
       describe('returned Client', () => {
@@ -50,7 +51,7 @@ describe('clients', () => {
 
     describe('get()', () => {
       it('should return a Promise resolving to the Client with the given id', () => {
-        return unit.openWindow('https://xfactor.com/').then((expected) => {
+        return unit.openWindow('https://what.com/').then((expected) => {
           return unit.get(expected.id).then((actual) => {
             expect(actual).to.equal(expected)
           })
@@ -67,8 +68,8 @@ describe('clients', () => {
     describe('claim()', () => {
       it('should return a Promise', () => {
         const actual = unit.claim()
-
         expect(actual).to.be.a('promise')
+        actual.then((r) => expect(r).to.be.an('undefined'))
       })
     })
 
