@@ -1,6 +1,7 @@
 'use strict'
 
 self.addEventListener('install', (evt) => {
+  // const ev = new FetchEvent('test', null)
   self.foo = 'foo'
 })
 
