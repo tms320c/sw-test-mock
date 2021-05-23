@@ -1,7 +1,7 @@
 'use strict'
 const { handle } = require('./lib/events')
 const createContext = require('./lib/createContext')
-const fetchFactory = require('./lib/fetchFactory')
+const { fetchFactory } = require('./lib/fetchFactory')
 const fs = require('fs')
 const Headers = require('./lib/Headers')
 const importScripts = require('./lib/importScripts')
