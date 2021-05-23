@@ -65,7 +65,7 @@ describe('ServiceWorkerGlobalScope', () => {
           expect(() => {
             const myRegistration = sw.scope.registration
           }).to.not.throw()
-          expect(sw.scope.registration).to.is.an('object')
+          expect(typeof sw.scope.registration).to.equal('object')
         })
     })
   })

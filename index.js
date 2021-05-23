@@ -30,47 +30,48 @@ const DEFAULT_PERMISSIONS_QUERY = async (permissionDesc) => {
 const containers = new Set()
 const contexts = new Map()
 
+/**
+ * Create/retrieve ServiceWorkerContainer instance for 'domain'
+ * @param {String} [url]
+ * @param {String} [webroot]
+ * @returns {Promise<ServiceWorkerContainer>}
+ */
+const connect = async (url = DEFAULT_ORIGIN, webroot = process.cwd()) => {
+  if (url.slice(-1) !== '/') {
+    url += '/'
+  }
+
+  const container = new ServiceWorkerContainer(url, webroot, register, trigger)
+
+  containers.add(container)
+  // TODO: check if active context and apply state
+  return container
+}
+
+/**
+ * Destroy all active containers/contexts
+ * @returns {Promise}
+ */
+const destroy = async () => {
+  for (const container of containers) {
+    container._destroy()
+  }
+  for (const context of contexts.values()) {
+    context.registration._destroy()
+    context.sw._destroy()
+    context.scope._destroy()
+  }
+  containers.clear()
+  contexts.clear()
+}
+
 module.exports = {
   Headers,
   MessageChannel,
   Request,
   Response,
-
-  /**
-   * Create/retrieve ServiceWorkerContainer instance for 'domain'
-   * @param {String} [url]
-   * @param {String} [webroot]
-   * @returns {Promise<ServiceWorkerContainer>}
-   */
-  connect(url = DEFAULT_ORIGIN, webroot = process.cwd()) {
-    if (url.slice(-1) !== '/') {
-      url += '/'
-    }
-
-    const container = new ServiceWorkerContainer(url, webroot, register, trigger)
-
-    containers.add(container)
-    // TODO: check if active context and apply state
-    return Promise.resolve(container)
-  },
-
-  /**
-   * Destroy all active containers/contexts
-   * @returns {Promise}
-   */
-  destroy() {
-    for (const container of containers) {
-      container._destroy()
-    }
-    for (const context of contexts.values()) {
-      context.registration._destroy()
-      context.sw._destroy()
-      context.scope._destroy()
-    }
-    containers.clear()
-    contexts.clear()
-    return Promise.resolve()
-  },
+  connect,
+  destroy,
 }
 
 /**
@@ -82,33 +83,33 @@ module.exports = {
  *  - {String} scope
  * @returns {Promise<ServiceWorkerRegistration>}
  */
-function register(
+const register = (
   container,
   scriptURL,
   { scope = DEFAULT_SCOPE } = {},
   permissionQuery = DEFAULT_PERMISSIONS_QUERY
-) {
+) => {
   if (scriptURL.charAt(0) === '/') {
     scriptURL = scriptURL.slice(1)
   }
   const origin = getOrigin(container._url)
   const urlScope = new URL(scope, origin).href
   const webroot = container._webroot
-  let context
 
-  if (contexts.has(urlScope)) {
-    context = contexts.get(urlScope)
-  } else {
+  if (!contexts.has(urlScope)) {
     const isPath = !~scriptURL.indexOf('\n')
     const contextPath = isPath ? getResolvedPath(webroot, scriptURL) : findRootTestDir()
     const contextLocation = new URL(
       path.join(isPath ? scriptURL : 'sw.js').replace(/:\//, '://'),
       origin
     )
+
     const fetch = fetchFactory(origin)
     const registration = new ServiceWorkerRegistration(urlScope, unregister.bind(null, urlScope))
+
     const globalScope = new ServiceWorkerGlobalScope(registration, fetch, origin)
     const sw = new ServiceWorker(isPath ? scriptURL : '', swPostMessage.bind(null, container))
+
     let script = isPath
       ? fs.readFileSync(
           isRelativePath(scriptURL) ? path.resolve(webroot, scriptURL) : scriptURL,
@@ -131,15 +132,15 @@ function register(
 
     vm.runInContext(script, sandbox)
 
-    context = {
+    contexts.set(urlScope, {
       api: ctx.module.exports,
       registration,
       scope: sandbox,
       sw,
-    }
-
-    contexts.set(urlScope, context)
+    })
   }
+
+  const context = contexts.get(urlScope)
 
   getContainersForUrlScope(urlScope).forEach((container) => {
     container._registration = context.registration
@@ -159,11 +160,11 @@ function register(
  * @param {String} contextKey
  * @returns {Promise<Boolean>}
  */
-function unregister(contextKey) {
+const unregister = async (contextKey) => {
   const context = contexts.get(contextKey)
 
   if (!context) {
-    return Promise.resolve(false)
+    return false
   }
 
   getContainersForContext(context).forEach((container) => {
@@ -180,7 +181,7 @@ function unregister(contextKey) {
 
   contexts.delete(contextKey)
 
-  return Promise.resolve(true)
+  return true
 }
 
 /**
@@ -190,8 +191,8 @@ function unregister(contextKey) {
  * @param {Array} transferList
  * @returns {void}
  */
-function clientPostMessage(container, message, transferList) {
-  handle(container, 'message', message, transferList, container.controller)
+const clientPostMessage = (container, message, transferList) => {
+  handle(container, 'message', message, transferList, container.controller).then()
 }
 
 /**
@@ -201,8 +202,8 @@ function clientPostMessage(container, message, transferList) {
  * @param {Array} transferList
  * @returns {void}
  * */
-function swPostMessage(container, message, transferList) {
-  trigger(container, 'message', message, transferList)
+const swPostMessage = (container, message, transferList) => {
+  trigger(container, 'message', message, transferList).then()
 }
 
 /**
@@ -212,7 +213,7 @@ function swPostMessage(container, message, transferList) {
  * @param args
  * @returns {Promise}
  */
-function trigger(container, eventType, ...args) {
+const trigger = async (container, eventType, ...args) => {
   // TODO: fully qualify 'fetch' event urls
   const context = getContextForContainer(container)
 
@@ -233,8 +234,8 @@ function trigger(container, eventType, ...args) {
     // No state mgmt necessary
   }
 
-  const done = () => {
-    switch (eventType) {
+  const done = (evType) => {
+    switch (evType) {
       case 'install':
         setState('installed', context, containers)
         break
@@ -247,7 +248,7 @@ function trigger(container, eventType, ...args) {
   }
 
   return handle(context.scope, eventType, ...args).then((result) => {
-    done()
+    done(eventType)
     return result
   })
 }
@@ -259,33 +260,33 @@ function trigger(container, eventType, ...args) {
  * @param {Array} containers
  * @returns {void}
  */
-function setState(state, context, containers) {
+const setState = (state, context, containers) => {
   // TODO: emit serviceworker.onstatechange events
   switch (state) {
     case 'installing':
       if (context.sw.state !== 'installing') {
         return
       }
-      context.registration.installing = context.sw
+      context.registration._installing = context.sw
       setControllerForContainers(null, containers)
       break
     case 'installed':
       context.sw.state = state
-      context.registration.installing = null
-      context.registration.waiting = context.sw
+      context.registration._installing = null
+      context.registration._waiting = context.sw
       break
     case 'activating':
       if (!context.sw.state.includes('install')) {
         throw Error('ServiceWorker not yet installed')
       }
       context.sw.state = state
-      context.registration.activating = context.sw
+      context.registration._activating = context.sw
       setControllerForContainers(null, containers)
       break
     case 'activated':
       context.sw.state = state
-      context.registration.waiting = null
-      context.registration.active = context.sw
+      context.registration._waiting = null
+      context.registration._active = context.sw
       setControllerForContainers(context.sw, containers)
       break
     default:
@@ -301,7 +302,7 @@ function setState(state, context, containers) {
  * @param {Array} containers
  * @returns {void}
  */
-function setControllerForContainers(controller, containers) {
+const setControllerForContainers = (controller, containers) => {
   for (const container of containers) {
     container.controller = controller
   }
@@ -312,7 +313,7 @@ function setControllerForContainers(controller, containers) {
  * @param {Object} context
  * @returns {Array}
  */
-function getContainersForContext(context) {
+const getContainersForContext = (context) => {
   const results = []
 
   for (const container of containers) {
@@ -329,7 +330,7 @@ function getContainersForContext(context) {
  * @param {String} urlScope
  * @returns {Array}
  */
-function getContainersForUrlScope(urlScope) {
+const getContainersForUrlScope = (urlScope) => {
   const results = []
 
   for (const container of containers) {
@@ -346,7 +347,7 @@ function getContainersForUrlScope(urlScope) {
  * @param {ServiceWorkerContainer} container
  * @returns {Object}
  */
-function getContextForContainer(container) {
+const getContextForContainer = (container) => {
   for (const context of contexts.values()) {
     if (context.sw === container._sw) {
       return context
@@ -360,7 +361,7 @@ function getContextForContainer(container) {
  * @param {String} urlString
  * @returns {String}
  */
-function getOrigin(urlString) {
+const getOrigin = (urlString) => {
   return new URL(urlString).origin
 }
 
@@ -370,7 +371,7 @@ function getOrigin(urlString) {
  * @param {String} p
  * @returns {String}
  */
-function getResolvedPath(contextPath, p) {
+const getResolvedPath = (contextPath, p) => {
   return isRelativePath(p) ? path.resolve(contextPath, p) : p
 }
 
@@ -379,14 +380,15 @@ function getResolvedPath(contextPath, p) {
  * @param {String} p
  * @returns {Boolean}
  */
-function isRelativePath(p) {
+const isRelativePath = (p) => {
   return !path.isAbsolute(p)
 }
 
-function findRootTestDir() {
+const findRootTestDir = () => {
   let main = module.parent
   let dir = ''
-
+  // const moduleParents = Object.values(require.cache)
+  //   .filter((m) => m.children.includes(module))
   while (main) {
     dir = path.dirname(main.filename)
     main = !main.parent || main.parent.filename.includes('node_modules') ? null : main.parent
