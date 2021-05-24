@@ -1,5 +1,6 @@
 const { hasContainer, getContainer, addContainer, destroyAllContainers } = require('./pool')
-const { getRegister, getTrigger } = require('./registration')
+const { getRegister } = require('./registration')
+const { getTrigger } = require('./trigger')
 
 const ServiceWorkerContainer = require('../lib/ServiceWorkerContainer')
 
