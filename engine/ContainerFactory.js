@@ -5,6 +5,8 @@ module.exports = class ContainerFactory {
   // static _pool = new Map()
   static _cache = new Map()
 
+  static _contexts = new Map()
+
   /**
    *
    * @param {String} url
@@ -42,10 +44,42 @@ module.exports = class ContainerFactory {
     return this._cache.get(key)
   }
 
+  static hasContext(urlScope) {
+    return this._contexts.has(urlScope)
+  }
+
+  static addContext(urlScope, ctx) {
+    this._contexts.set(urlScope, ctx)
+  }
+
+  static getContext(urlScope) {
+    return this._contexts.get(urlScope)
+  }
+
+  static removeContext(urlScope) {
+    this._contexts.delete(urlScope)
+  }
+
+  static getContextForContainer(container) {
+    for (const context of this._contexts.values()) {
+      if (context.sw === container._sw) {
+        return context
+      }
+    }
+    return null
+  }
+
   static destroyAll() {
     for (let container of this._pool.values()) {
       container._destroy()
     }
     this._pool.clear()
+
+    for (const context of this._contexts.values()) {
+      context.registration._destroy()
+      context.sw._destroy()
+      context.scope._destroy()
+    }
+    this._contexts.clear()
   }
 }

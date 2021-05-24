@@ -28,8 +28,6 @@ const DEFAULT_PERMISSIONS_QUERY = async (permissionDesc) => {
   }
 }
 
-const contexts = new Map()
-
 /**
  * Create/retrieve ServiceWorkerContainer instance for 'domain'
  * @param {String} [url]
@@ -47,17 +45,11 @@ const connect = async (url = DEFAULT_ORIGIN, webroot = process.cwd()) => {
 }
 
 /**
- * Destroy all active containers/contexts
+ * Destroy all active containers/_contexts
  * @returns {Promise}
  */
 const destroy = async () => {
   ContainerFactory.destroyAll()
-  for (const context of contexts.values()) {
-    context.registration._destroy()
-    context.sw._destroy()
-    context.scope._destroy()
-  }
-  contexts.clear()
 }
 
 module.exports = {
@@ -87,7 +79,7 @@ const register = (
   const origin = new URL(container._url).origin
   const urlScope = new URL(scope, origin).href
 
-  if (!contexts.has(urlScope)) {
+  if (!ContainerFactory.hasContext(urlScope)) {
     if (scriptURL.charAt(0) === '/') {
       scriptURL = scriptURL.slice(1)
     }
@@ -127,7 +119,7 @@ const register = (
 
     vm.runInContext(script, sandbox)
 
-    contexts.set(urlScope, {
+    ContainerFactory.addContext(urlScope, {
       api: ctx.module.exports,
       registration,
       scope: sandbox,
@@ -135,7 +127,7 @@ const register = (
     })
   }
 
-  const context = contexts.get(urlScope)
+  const context = ContainerFactory.getContext(urlScope)
 
   ContainerFactory.getForScope(urlScope).forEach((container) => {
     container._registration = context.registration
@@ -155,7 +147,7 @@ const register = (
  * @returns {Promise<Boolean>}
  */
 const unregister = async (contextKey) => {
-  const context = contexts.get(contextKey)
+  const context = ContainerFactory.getContext(contextKey)
 
   if (!context) {
     return false
@@ -173,7 +165,7 @@ const unregister = async (contextKey) => {
   context.sw._destroy()
   context.scope._destroy()
 
-  contexts.delete(contextKey)
+  ContainerFactory.removeContext(contextKey)
 
   return true
 }
@@ -209,7 +201,7 @@ const swPostMessage = (container, message, transferList) => {
  */
 const trigger = async (container, eventType, ...args) => {
   // TODO: fully qualify 'fetch' event urls
-  const context = getContextForContainer(container)
+  const context = ContainerFactory.getContextForContainer(container)
 
   if (!context) {
     throw Error('no script registered yet in trigger')
@@ -300,20 +292,6 @@ const setControllerForContainers = (controller, containers) => {
   for (const container of containers) {
     container.controller = controller
   }
-}
-
-/**
- * Retrieve context for 'container'
- * @param {ServiceWorkerContainer} container
- * @returns {Object}
- */
-const getContextForContainer = (container) => {
-  for (const context of contexts.values()) {
-    if (context.sw === container._sw) {
-      return context
-    }
-  }
-  return null
 }
 
 /**
