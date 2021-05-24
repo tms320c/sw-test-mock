@@ -5,6 +5,19 @@ const fs = require('fs')
 const vm = require('vm')
 
 const { handle } = require('../lib/events')
+const {
+  hasContext,
+  getContext,
+  getAllContexts,
+  addContext,
+  addContainer,
+  getForScope,
+  getForWorker,
+  destroyAllContainers,
+} = require('./pool')
+
+const { getUnregister } = require('./registration')
+
 const importScripts = require('../lib/importScripts')
 const ServiceWorkerContainer = require('../lib/ServiceWorkerContainer')
 const ServiceWorker = require('../lib/ServiceWorker')
@@ -23,12 +36,6 @@ const DEFAULT_PERMISSIONS_QUERY = async (permissionDesc) => {
 }
 
 module.exports = class ContainerFactory {
-  static _pool = new Set()
-  // static _pool = new Map()
-  static _cache = new Map()
-
-  static _contexts = new Map()
-
   /**
    *
    * @param {String} url
@@ -45,56 +52,12 @@ module.exports = class ContainerFactory {
     container.trigger = this.getTrigger(container)
 
     // this._pool.set(key, container)
-    this._pool.add(container)
-    this._cache.clear()
+    addContainer(container)
     return container
   }
 
-  static getForScope(urlScope) {
-    return this._getForPredicate(urlScope, (v, i, a) => v._url.indexOf(urlScope) === 0)
-  }
-
-  static getForWorker(sw) {
-    return this._getForPredicate(sw, (v, i, a) => v._sw === sw)
-  }
-
-  static _getForPredicate(key, predicate) {
-    if (!this._cache.has(key)) {
-      const containers = [...this._pool.values()].filter((v, i, a) => predicate(v, i, a))
-      this._cache.set(key, containers)
-      return containers
-    }
-    return this._cache.get(key)
-  }
-
-  static hasContext(urlScope) {
-    return this._contexts.has(urlScope)
-  }
-
-  static addContext(urlScope, ctx) {
-    this._contexts.set(urlScope, ctx)
-  }
-
-  static getContext(urlScope) {
-    return this._contexts.get(urlScope)
-  }
-
-  static removeContext(urlScope) {
-    this._contexts.delete(urlScope)
-  }
-
   static destroyAll() {
-    for (let container of this._pool.values()) {
-      container._destroy()
-    }
-    this._pool.clear()
-
-    for (const context of this._contexts.values()) {
-      context.registration._destroy()
-      context.sw._destroy()
-      context.scope._destroy()
-    }
-    this._contexts.clear()
+    destroyAllContainers()
   }
 
   static getRegister =
@@ -111,7 +74,7 @@ module.exports = class ContainerFactory {
       const origin = new URL(container._url).origin
       const urlScope = new URL(scope, origin).href
 
-      if (!ContainerFactory.hasContext(urlScope)) {
+      if (!hasContext(urlScope)) {
         if (scriptURL.charAt(0) === '/') {
           scriptURL = scriptURL.slice(1)
         }
@@ -125,7 +88,7 @@ module.exports = class ContainerFactory {
 
         const fetch = fetchFactory(origin)
         const registration = new ServiceWorkerRegistration(urlScope)
-        registration.unregister = this.getUnregister(urlScope)
+        registration.unregister = getUnregister(urlScope)
 
         const globalScope = new ServiceWorkerGlobalScope(registration, fetch, origin)
         const sw = new ServiceWorker(isPath ? scriptURL : '')
@@ -153,7 +116,7 @@ module.exports = class ContainerFactory {
 
         vm.runInContext(script, sandbox)
 
-        ContainerFactory.addContext(urlScope, {
+        addContext(urlScope, {
           api: ctx.module.exports,
           registration,
           scope: sandbox,
@@ -161,9 +124,9 @@ module.exports = class ContainerFactory {
         })
       }
 
-      const context = ContainerFactory.getContext(urlScope)
+      const context = getContext(urlScope)
 
-      ContainerFactory.getForScope(urlScope).forEach((container) => {
+      getForScope(urlScope).forEach((container) => {
         container._registration = context.registration
         container._sw = context.sw
         container.api = context.api
@@ -175,27 +138,6 @@ module.exports = class ContainerFactory {
       return Promise.resolve(container._registration)
     }
 
-  static getUnregister = (urlScope) => {
-    return async () => {
-      const context = ContainerFactory.getContext(urlScope)
-      if (!context) {
-        return false
-      }
-      ContainerFactory.getForWorker(context.sw).forEach((container) => {
-        container._registration = null
-        container._sw = null
-        container.api = null
-        container.scope = null
-        container.controller = null
-      })
-      context.registration._destroy()
-      context.sw._destroy()
-      context.scope._destroy()
-      ContainerFactory.removeContext(urlScope)
-      return true
-    }
-  }
-
   static getTrigger =
     (container) =>
     /**
@@ -206,15 +148,13 @@ module.exports = class ContainerFactory {
      */
     async (eventType, ...args) => {
       // TODO: fully qualify 'fetch' event urls
-      const context = [...ContainerFactory._contexts.values()].find(
-        (v, i, a) => v.sw === container._sw
-      )
+      const context = [...getAllContexts()].find((v, i, a) => v.sw === container._sw)
 
       if (!context) {
         throw Error('no script registered yet')
       }
 
-      const containers = ContainerFactory.getForWorker(context.sw)
+      const containers = getForWorker(context.sw)
 
       switch (eventType) {
         case 'install':
