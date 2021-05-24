@@ -1,15 +1,5 @@
 const { handle } = require('./handler')
-const {
-  hasContext,
-  getContext,
-  removeContext,
-  getAllContexts,
-  addContext,
-  addContainer,
-  getForScope,
-  getForWorker,
-  destroyAllContainers,
-} = require('./pool')
+const { getAllContexts, getForWorker } = require('./pool')
 
 const getTrigger =
   (container) =>
