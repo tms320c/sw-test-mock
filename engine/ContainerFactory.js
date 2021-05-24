@@ -40,7 +40,10 @@ module.exports = class ContainerFactory {
     // if (this._pool.has(key)) {
     //   return this._pool.get(key)
     // }
-    const container = new ServiceWorkerContainer(url, webroot, this.register, this.trigger)
+    const container = new ServiceWorkerContainer(url, webroot)
+    container.register = this.getRegister(container)
+    container.trigger = this.getTrigger(container)
+
     // this._pool.set(key, container)
     this._pool.add(container)
     this._cache.clear()
@@ -94,85 +97,83 @@ module.exports = class ContainerFactory {
     this._contexts.clear()
   }
 
-  /**
-   * Register ServiceWorker script at 'scriptURL'
-   * @param {ServiceWorkerContainer} container
-   * @param {String} scriptURL
-   * @param {Function} permissionQuery
-   * @param {Object} [options]
-   *  - {String} scope
-   * @returns {Promise<ServiceWorkerRegistration>}
-   */
-  static register = (
-    container,
-    scriptURL,
-    { scope = DEFAULT_SCOPE } = {},
-    permissionQuery = DEFAULT_PERMISSIONS_QUERY
-  ) => {
-    const origin = new URL(container._url).origin
-    const urlScope = new URL(scope, origin).href
+  static getRegister =
+    (container) =>
+    /**
+     * Register ServiceWorker script at 'scriptURL'
+     * @param {String} scriptURL
+     * @param {Function} permissionQuery
+     * @param {Object} [options]
+     *  - {String} scope
+     * @returns {Promise<ServiceWorkerRegistration>}
+     */
+    (scriptURL, { scope = DEFAULT_SCOPE } = {}, permissionQuery = DEFAULT_PERMISSIONS_QUERY) => {
+      const origin = new URL(container._url).origin
+      const urlScope = new URL(scope, origin).href
 
-    if (!ContainerFactory.hasContext(urlScope)) {
-      if (scriptURL.charAt(0) === '/') {
-        scriptURL = scriptURL.slice(1)
+      if (!ContainerFactory.hasContext(urlScope)) {
+        if (scriptURL.charAt(0) === '/') {
+          scriptURL = scriptURL.slice(1)
+        }
+        const webroot = container._webroot
+        const isPath = !~scriptURL.indexOf('\n')
+        const contextPath = isPath ? getResolvedPath(webroot, scriptURL) : findRootTestDir()
+        const contextLocation = new URL(
+          path.join(isPath ? scriptURL : 'sw.js').replace(/:\//, '://'),
+          origin
+        )
+
+        const fetch = fetchFactory(origin)
+        const registration = new ServiceWorkerRegistration(urlScope)
+        registration.unregister = this.getUnregister(urlScope)
+
+        const globalScope = new ServiceWorkerGlobalScope(registration, fetch, origin)
+        const sw = new ServiceWorker(isPath ? scriptURL : '')
+        sw.postMessage = this.getSWPostMessage(container)
+
+        let script = isPath
+          ? fs.readFileSync(
+              isRelativePath(scriptURL) ? path.resolve(webroot, scriptURL) : scriptURL,
+              'utf8'
+            )
+          : scriptURL
+        script = importScripts(script, container._webroot)
+        // contextLocation.origin = origin;
+        contextLocation._webroot = container._webroot
+        const ctx = createContext(
+          globalScope,
+          contextLocation,
+          contextPath,
+          origin,
+          fetch,
+          permissionQuery
+        )
+
+        const sandbox = vm.createContext(ctx)
+
+        vm.runInContext(script, sandbox)
+
+        ContainerFactory.addContext(urlScope, {
+          api: ctx.module.exports,
+          registration,
+          scope: sandbox,
+          sw,
+        })
       }
-      const webroot = container._webroot
-      const isPath = !~scriptURL.indexOf('\n')
-      const contextPath = isPath ? getResolvedPath(webroot, scriptURL) : findRootTestDir()
-      const contextLocation = new URL(
-        path.join(isPath ? scriptURL : 'sw.js').replace(/:\//, '://'),
-        origin
-      )
 
-      const fetch = fetchFactory(origin)
-      const registration = new ServiceWorkerRegistration(urlScope, this.getUnregister(urlScope))
+      const context = ContainerFactory.getContext(urlScope)
 
-      const globalScope = new ServiceWorkerGlobalScope(registration, fetch, origin)
-      const sw = new ServiceWorker(isPath ? scriptURL : '', this.getSWPostMessage(container))
-
-      let script = isPath
-        ? fs.readFileSync(
-            isRelativePath(scriptURL) ? path.resolve(webroot, scriptURL) : scriptURL,
-            'utf8'
-          )
-        : scriptURL
-      script = importScripts(script, container._webroot)
-      // contextLocation.origin = origin;
-      contextLocation._webroot = container._webroot
-      const ctx = createContext(
-        globalScope,
-        contextLocation,
-        contextPath,
-        origin,
-        fetch,
-        permissionQuery
-      )
-
-      const sandbox = vm.createContext(ctx)
-
-      vm.runInContext(script, sandbox)
-
-      ContainerFactory.addContext(urlScope, {
-        api: ctx.module.exports,
-        registration,
-        scope: sandbox,
-        sw,
+      ContainerFactory.getForScope(urlScope).forEach((container) => {
+        container._registration = context.registration
+        container._sw = context.sw
+        container.api = context.api
+        container.scope = context.scope
+        // Create client for container
+        container.scope.clients._connect(container._url, clientPostMessage.bind(null, container))
       })
+
+      return Promise.resolve(container._registration)
     }
-
-    const context = ContainerFactory.getContext(urlScope)
-
-    ContainerFactory.getForScope(urlScope).forEach((container) => {
-      container._registration = context.registration
-      container._sw = context.sw
-      container.api = context.api
-      container.scope = context.scope
-      // Create client for container
-      container.scope.clients._connect(container._url, clientPostMessage.bind(null, container))
-    })
-
-    return Promise.resolve(container._registration)
-  }
 
   static getUnregister = (urlScope) => {
     return async () => {
@@ -195,54 +196,55 @@ module.exports = class ContainerFactory {
     }
   }
 
-  /**
-   * Trigger 'eventType' in current scope
-   * @param {ServiceWorkerContainer} container
-   * @param {String} eventType
-   * @param args
-   * @returns {Promise}
-   */
-  static trigger = async (container, eventType, ...args) => {
-    // TODO: fully qualify 'fetch' event urls
-    const context = [...ContainerFactory._contexts.values()].find(
-      (v, i, a) => v.sw === container._sw
-    )
+  static getTrigger =
+    (container) =>
+    /**
+     * Trigger 'eventType' in current scope
+     * @param {String} eventType
+     * @param args
+     * @returns {Promise}
+     */
+    async (eventType, ...args) => {
+      // TODO: fully qualify 'fetch' event urls
+      const context = [...ContainerFactory._contexts.values()].find(
+        (v, i, a) => v.sw === container._sw
+      )
 
-    if (!context) {
-      throw Error('no script registered yet')
-    }
+      if (!context) {
+        throw Error('no script registered yet')
+      }
 
-    const containers = ContainerFactory.getForWorker(context.sw)
+      const containers = ContainerFactory.getForWorker(context.sw)
 
-    switch (eventType) {
-      case 'install':
-        setState('installing', context, containers)
-        break
-      case 'activate':
-        setState('activating', context, containers)
-        break
-      default:
-      // No state mgmt necessary
-    }
-
-    const done = (evType) => {
-      switch (evType) {
+      switch (eventType) {
         case 'install':
-          setState('installed', context, containers)
+          setState('installing', context, containers)
           break
         case 'activate':
-          setState('activated', context, containers)
+          setState('activating', context, containers)
           break
         default:
         // No state mgmt necessary
       }
-    }
 
-    return handle(context.scope, eventType, ...args).then((result) => {
-      done(eventType)
-      return result
-    })
-  }
+      const done = (evType) => {
+        switch (evType) {
+          case 'install':
+            setState('installed', context, containers)
+            break
+          case 'activate':
+            setState('activated', context, containers)
+            break
+          default:
+          // No state mgmt necessary
+        }
+      }
+
+      return handle(context.scope, eventType, ...args).then((result) => {
+        done(eventType)
+        return result
+      })
+    }
 
   static getSWPostMessage = (container) => {
     /**
@@ -251,8 +253,8 @@ module.exports = class ContainerFactory {
      * @param {Array} transferList
      * @returns {void}
      * */
-    return (message, transferList) =>
-      this.trigger(container, 'message', message, transferList).then()
+    const trigger = this.getTrigger(container)
+    return (message, transferList) => trigger('message', message, transferList).then()
   }
 }
 
