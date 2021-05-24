@@ -10,10 +10,11 @@ const path = require('path')
 const Request = require('./lib/Request')
 const Response = require('./lib/Response')
 const ServiceWorker = require('./lib/ServiceWorker')
-const ServiceWorkerContainer = require('./lib/ServiceWorkerContainer')
 const ServiceWorkerGlobalScope = require('./lib/ServiceWorkerGlobalScope')
 const ServiceWorkerRegistration = require('./lib/ServiceWorkerRegistration')
 const vm = require('vm')
+
+const ContainerFactory = require('./engine/ContainerFactory')
 
 const DEFAULT_ORIGIN = 'http://localhost:3333/'
 const DEFAULT_SCOPE = './'
@@ -27,7 +28,6 @@ const DEFAULT_PERMISSIONS_QUERY = async (permissionDesc) => {
   }
 }
 
-const containers = new Set()
 const contexts = new Map()
 
 /**
@@ -41,9 +41,7 @@ const connect = async (url = DEFAULT_ORIGIN, webroot = process.cwd()) => {
     url += '/'
   }
 
-  const container = new ServiceWorkerContainer(url, webroot, register, trigger)
-
-  containers.add(container)
+  const container = ContainerFactory.get(url, webroot, register, trigger)
   // TODO: check if active context and apply state
   return container
 }
@@ -53,15 +51,12 @@ const connect = async (url = DEFAULT_ORIGIN, webroot = process.cwd()) => {
  * @returns {Promise}
  */
 const destroy = async () => {
-  for (const container of containers) {
-    container._destroy()
-  }
+  ContainerFactory.destroyAll()
   for (const context of contexts.values()) {
     context.registration._destroy()
     context.sw._destroy()
     context.scope._destroy()
   }
-  containers.clear()
   contexts.clear()
 }
 
@@ -89,14 +84,14 @@ const register = (
   { scope = DEFAULT_SCOPE } = {},
   permissionQuery = DEFAULT_PERMISSIONS_QUERY
 ) => {
-  if (scriptURL.charAt(0) === '/') {
-    scriptURL = scriptURL.slice(1)
-  }
-  const origin = getOrigin(container._url)
+  const origin = new URL(container._url).origin
   const urlScope = new URL(scope, origin).href
-  const webroot = container._webroot
 
   if (!contexts.has(urlScope)) {
+    if (scriptURL.charAt(0) === '/') {
+      scriptURL = scriptURL.slice(1)
+    }
+    const webroot = container._webroot
     const isPath = !~scriptURL.indexOf('\n')
     const contextPath = isPath ? getResolvedPath(webroot, scriptURL) : findRootTestDir()
     const contextLocation = new URL(
@@ -142,12 +137,11 @@ const register = (
 
   const context = contexts.get(urlScope)
 
-  getContainersForUrlScope(urlScope).forEach((container) => {
+  ContainerFactory.getForScope(urlScope).forEach((container) => {
     container._registration = context.registration
     container._sw = context.sw
     container.api = context.api
     container.scope = context.scope
-
     // Create client for container
     container.scope.clients._connect(container._url, clientPostMessage.bind(null, container))
   })
@@ -167,7 +161,7 @@ const unregister = async (contextKey) => {
     return false
   }
 
-  getContainersForContext(context).forEach((container) => {
+  ContainerFactory.getForWorker(context.sw).forEach((container) => {
     container._registration = null
     container._sw = null
     container.api = null
@@ -218,10 +212,10 @@ const trigger = async (container, eventType, ...args) => {
   const context = getContextForContainer(container)
 
   if (!context) {
-    throw Error('no script registered yet')
+    throw Error('no script registered yet in trigger')
   }
 
-  const containers = getContainersForContext(context)
+  const containers = ContainerFactory.getForWorker(context.sw)
 
   switch (eventType) {
     case 'install':
@@ -309,40 +303,6 @@ const setControllerForContainers = (controller, containers) => {
 }
 
 /**
- * Retrieve all containers associated with 'context'
- * @param {Object} context
- * @returns {Array}
- */
-const getContainersForContext = (context) => {
-  const results = []
-
-  for (const container of containers) {
-    if (container._sw === context.sw) {
-      results.push(container)
-    }
-  }
-
-  return results
-}
-
-/**
- * Retrieve all containers that fall under 'urlScope'
- * @param {String} urlScope
- * @returns {Array}
- */
-const getContainersForUrlScope = (urlScope) => {
-  const results = []
-
-  for (const container of containers) {
-    if (container._url.indexOf(urlScope) === 0) {
-      results.push(container)
-    }
-  }
-
-  return results
-}
-
-/**
  * Retrieve context for 'container'
  * @param {ServiceWorkerContainer} container
  * @returns {Object}
@@ -354,15 +314,6 @@ const getContextForContainer = (container) => {
     }
   }
   return null
-}
-
-/**
- * Retrieve origin from 'urlString'
- * @param {String} urlString
- * @returns {String}
- */
-const getOrigin = (urlString) => {
-  return new URL(urlString).origin
 }
 
 /**
