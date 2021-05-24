@@ -1,10 +1,10 @@
 'use strict'
 
-const ExtendableEvent = require('./ExtendableEvent')
-const FetchEvent = require('./FetchEvent')
-const MessageEvent = require('./MessageEvent')
-const NotificationEvent = require('./NotificationEvent')
-const PushEvent = require('./PushEvent')
+const ExtendableEvent = require('../lib/events/ExtendableEvent')
+const FetchEvent = require('../lib/events/FetchEvent')
+const MessageEvent = require('../lib/events/MessageEvent')
+const NotificationEvent = require('../lib/events/NotificationEvent')
+const PushEvent = require('../lib/events/PushEvent')
 
 /**
  * Create 'event' instance

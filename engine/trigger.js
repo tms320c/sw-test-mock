@@ -1,4 +1,4 @@
-const { handle } = require('../lib/events')
+const { handle } = require('./handler')
 const {
   hasContext,
   getContext,

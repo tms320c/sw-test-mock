@@ -2,7 +2,7 @@ const path = require('path')
 const fs = require('fs')
 const vm = require('vm')
 
-const { handle } = require('../lib/events')
+const { handle } = require('./handler')
 const createContext = require('./createContext')
 const { fetchFactory } = require('./fetchFactory')
 const importScripts = require('./importScripts')
