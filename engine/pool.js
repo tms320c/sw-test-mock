@@ -3,7 +3,10 @@ const _pool = new Set()
 const _cache = new Map()
 const _contexts = new Map()
 
-const addContainer = (container) => {
+const hasContainer = (key) => false
+const getContainer = (key) => undefined
+
+const addContainer = (key, container) => {
   _pool.add(container)
   _cache.clear()
 }
@@ -29,9 +32,7 @@ const removeContext = (urlScope) => {
 }
 
 const getForScope = (urlScope) => {
-  const val = [..._pool.values()]
-  return val.filter((v, i, a) => v._url.indexOf(urlScope) === 0)
-  // return _getForPredicate(urlScope, (v, i, a) => v._url.indexOf(urlScope) === 0)
+  return _getForPredicate(urlScope, (v, i, a) => v._url.indexOf(urlScope) === 0)
 }
 
 const getForWorker = (sw) => {
@@ -62,6 +63,8 @@ const destroyAllContainers = () => {
 }
 
 module.exports = {
+  hasContainer,
+  getContainer,
   addContainer,
   getAllContexts,
   hasContext,
