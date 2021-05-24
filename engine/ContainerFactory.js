@@ -80,15 +80,6 @@ module.exports = class ContainerFactory {
     this._contexts.delete(urlScope)
   }
 
-  static getContextForContainer(container) {
-    for (const context of this._contexts.values()) {
-      if (context.sw === container._sw) {
-        return context
-      }
-    }
-    return null
-  }
-
   static destroyAll() {
     for (let container of this._pool.values()) {
       container._destroy()
@@ -213,7 +204,9 @@ module.exports = class ContainerFactory {
    */
   static trigger = async (container, eventType, ...args) => {
     // TODO: fully qualify 'fetch' event urls
-    const context = ContainerFactory.getContextForContainer(container)
+    const context = [...ContainerFactory._contexts.values()].find(
+      (v, i, a) => v.sw === container._sw
+    )
 
     if (!context) {
       throw Error('no script registered yet')
